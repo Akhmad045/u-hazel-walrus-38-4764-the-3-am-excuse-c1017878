@@ -10,6 +10,7 @@ threat, so it refuses to sign. One breath, 70 characters.
 
 import argparse
 import sys
+import unicodedata
 from pathlib import Path
 
 ENTRY = "3 AM is the hour my threat model lists as 'you'. I don't sign threats."
@@ -31,6 +32,11 @@ def validate(text: str) -> None:
         raise ValueError("entry must not have leading or trailing whitespace")
     if any(ord(ch) < 0x20 and ch != "\t" for ch in text):
         raise ValueError("entry must not contain control characters")
+    # Invisible format characters (zero-width space and kin) are not
+    # whitespace to str.strip, so a line of only them would slip past the
+    # empty check while reading as blank to the judge. Reject them too.
+    if any(unicodedata.category(ch) == "Cf" for ch in text):
+        raise ValueError("entry must not contain invisible format characters")
     text.encode("utf-8")  # raises on text that is not UTF-8 encodable
 
 
@@ -56,6 +62,8 @@ def self_test() -> int:
         (" leading", False),            # leading whitespace
         ("trailing ", False),           # trailing whitespace
         ("\x07bell", False),            # control character
+        ("\u200b", False),              # zero-width space only (invisible)
+        ("\u200bhello", False),         # invisible format character inside
         ("a", True),                    # 1-char lower boundary
         ("x" * 200, True),              # 200-char upper boundary
         (ENTRY, True),                  # the entry itself
